@@ -113,7 +113,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Modelo ----------
 
-        fun importarModelo(uri: Uri) {
+    fun importarModelo(uri: Uri) {
         viewModelScope.launch {
             ocupado = true
             pronto = false
