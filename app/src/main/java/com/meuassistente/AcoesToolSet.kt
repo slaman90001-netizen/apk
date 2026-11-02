@@ -34,9 +34,9 @@ class AcoesToolSet(private val ctx: Context) : ToolSet {
         @ToolParam(description = "Hora do alarme, de 0 a 23") hora: Int,
         @ToolParam(description = "Minuto do alarme, de 0 a 59") minuto: Int,
         @ToolParam(description = "Nome do alarme. Padrão: Alarme") descricao: String = "Alarme"
-    ): Map<String, Any> {
+    ): String {
         if (hora !in 0..23 || minuto !in 0..59) {
-            return mapOf("sucesso" to false, "erro" to "horário inválido")
+            return "Erro: horário inválido."
         }
         val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, hora)
@@ -44,10 +44,13 @@ class AcoesToolSet(private val ctx: Context) : ToolSet {
             putExtra(AlarmClock.EXTRA_MESSAGE, descricao)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
-        val ok = abrir(intent)
         val horario = "%02d:%02d".format(hora, minuto)
-        if (ok) avisar("⏰ Alarme criado para $horario")
-        return mapOf("sucesso" to ok, "horario" to horario)
+        return if (abrir(intent)) {
+            avisar("⏰ Alarme criado para $horario")
+            "Alarme criado com sucesso para $horario."
+        } else {
+            "Erro: não foi possível criar o alarme."
+        }
     }
 
     @Tool(description = "Inicia um timer (contagem regressiva) no relógio do celular. Informe minutos e/ou segundos conforme o pedido. Exemplo: 2 segundos = segundos 2 e minutos 0. 5 minutos = minutos 5 e segundos 0.")
@@ -55,19 +58,22 @@ class AcoesToolSet(private val ctx: Context) : ToolSet {
         @ToolParam(description = "Quantidade de minutos. Use 0 se o pedido for só em segundos. Padrão: 0") minutos: Int = 0,
         @ToolParam(description = "Quantidade de segundos. Use 0 se o pedido for só em minutos. Padrão: 0") segundos: Int = 0,
         @ToolParam(description = "Nome do timer. Padrão: Timer") descricao: String = "Timer"
-    ): Map<String, Any> {
+    ): String {
         val total = minutos * 60 + segundos
         if (total < 1) {
-            return mapOf("sucesso" to false, "erro" to "duração inválida")
+            return "Erro: duração inválida."
         }
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
             putExtra(AlarmClock.EXTRA_LENGTH, total)
             putExtra(AlarmClock.EXTRA_MESSAGE, descricao)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
-        val ok = abrir(intent)
-        if (ok) avisar("⏳ Timer iniciado: $minutos min $segundos s")
-        return mapOf("sucesso" to ok, "total_segundos" to total)
+        return if (abrir(intent)) {
+            avisar("⏳ Timer iniciado: $minutos min $segundos s")
+            "Timer iniciado com sucesso: $minutos minutos e $segundos segundos."
+        } else {
+            "Erro: não foi possível iniciar o timer."
+        }
     }
 
     @Tool(description = "Abre a agenda do celular com um novo evento preenchido, para o usuário confirmar.")
@@ -76,19 +82,22 @@ class AcoesToolSet(private val ctx: Context) : ToolSet {
         @ToolParam(description = "Data no formato dd/MM/yyyy") dataEvento: String,
         @ToolParam(description = "Hora de início no formato HH:mm, 24 horas") hora: String,
         @ToolParam(description = "Duração em minutos. Padrão: 60") duracaoMinutos: Int = 60
-    ): Map<String, Any> {
+    ): String {
         val inicio: Long = try {
             SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
                 .parse("$dataEvento $hora")!!.time
         } catch (e: Exception) {
-            return mapOf("sucesso" to false, "erro" to "data ou hora inválida")
+            return "Erro: data ou hora inválida."
         }
         val intent = Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI).apply {
             putExtra(CalendarContract.Events.TITLE, titulo)
             putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, inicio)
             putExtra(CalendarContract.EXTRA_EVENT_END_TIME, inicio + duracaoMinutos * 60_000L)
         }
-        val ok = abrir(intent)
-        return mapOf("sucesso" to ok, "titulo" to titulo)
+        return if (abrir(intent)) {
+            "Agenda aberta com o evento \"$titulo\" para o usuário confirmar."
+        } else {
+            "Erro: não foi possível abrir a agenda."
+        }
     }
 }
