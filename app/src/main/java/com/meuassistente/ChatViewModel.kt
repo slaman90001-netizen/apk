@@ -13,6 +13,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class Msg(val texto: String, val doUsuario: Boolean)
 
@@ -32,6 +35,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var engine: Engine? = null
     private var conversa: Conversation? = null
     @Volatile private var recriar = false
+    @Volatile private var usarFerramentas = true
+    @Volatile private var criadaEm = 0L
 
     val mensagens = mutableStateListOf<Msg>()
     val fatos = mutableStateListOf<String>()
@@ -74,6 +79,12 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun promptSistema(): String {
         val sb = StringBuilder(PROMPT_SISTEMA)
+        val agora = SimpleDateFormat("EEEE, dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date())
+        sb.append("\n\nData e hora atuais: ").append(agora).append(".")
+        if (usarFerramentas) {
+            sb.append("\nVocê tem ferramentas para criar alarmes, timers e eventos na agenda. ")
+            sb.append("Use-as somente quando o usuário pedir isso.")
+        }
         if (fatos.isNotEmpty()) {
             sb.append("\n\nO que você sabe sobre o usuário (use quando for relevante):\n")
             fatos.forEach { sb.append("- ").append(it).append("\n") }
@@ -102,12 +113,29 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private fun recriarConversa() {
         val e = engine ?: return
         conversa?.close()
-        conversa = e.createConversation(
-            ConversationConfig(
-                systemInstruction = Contents.of(promptSistema()),
-                initialMessages = historicoInicial()
+        val sistema = Contents.of(promptSistema())
+        val historico = historicoInicial()
+        conversa = if (usarFerramentas) {
+            try {
+                e.createConversation(
+                    ConversationConfig(
+                        systemInstruction = sistema,
+                        initialMessages = historico,
+                        tools = listOf(tool(AcoesToolSet(getApplication<Application>().applicationContext)))
+                    )
+                )
+            } catch (ex: Throwable) {
+                usarFerramentas = false
+                e.createConversation(
+                    ConversationConfig(systemInstruction = sistema, initialMessages = historico)
+                )
+            }
+        } else {
+            e.createConversation(
+                ConversationConfig(systemInstruction = sistema, initialMessages = historico)
             )
-        )
+        }
+        criadaEm = System.currentTimeMillis()
         recriar = false
     }
 
@@ -199,7 +227,10 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.Default) {
-                    if (recriar) recriarConversa()
+                    // Recria a conversa se a memória mudou ou se a data/hora do prompt ficou velha
+                    if (recriar || System.currentTimeMillis() - criadaEm > 30 * 60 * 1000L) {
+                        recriarConversa()
+                    }
                     val conv = conversa ?: throw IllegalStateException("conversa não iniciada")
                     conv.sendMessageAsync(limpo).collect { parte ->
                         val atual = mensagens[idx]
@@ -209,6 +240,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 val atual = mensagens[idx]
                 mensagens[idx] = atual.copy(texto = atual.texto + "\n[erro: ${e.message}]")
+                if (usarFerramentas) {
+                    usarFerramentas = false
+                    recriar = true
+                    status = "Ferramentas desativadas após um erro. Alarmes e timers por conversa não funcionam até reabrir o app."
+                }
             }
             memoria.salvarHistorico(mensagens)
             ocupado = false
