@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ai.edge.litertlm.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,7 +49,42 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     init {
         fatos.addAll(memoria.carregarFatos())
         mensagens.addAll(memoria.carregarHistorico())
+        instalarRegistroDeErros()
         if (temModelo) viewModelScope.launch { carregarModelo() }
+    }
+
+    // ---------- Registro de erros ----------
+
+    private fun resumoErro(e: Throwable): String {
+        val sb = StringBuilder()
+        var c: Throwable? = e
+        var n = 0
+        while (c != null && n < 4) {
+            sb.append(c.javaClass.name).append(": ").append(c.message).append("\n")
+            c.stackTrace.take(4).forEach { sb.append("  at ").append(it).append("\n") }
+            c = c.cause
+            n++
+        }
+        return sb.toString().take(1200)
+    }
+
+    private fun instalarRegistroDeErros() {
+        val arq = File(getApplication<Application>().filesDir, "ultimo_erro.txt")
+        if (arq.exists()) {
+            val t = try { arq.readText() } catch (e: Exception) { "" }
+            arq.delete()
+            if (t.isNotBlank()) {
+                mensagens.add(Msg("⚠️ O app fechou por um erro na última vez:\n" + t, false))
+            }
+        }
+        val anterior = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { th, e ->
+            try {
+                arq.writeText(resumoErro(e))
+            } catch (ex: Exception) {
+            }
+            anterior?.uncaughtException(th, e)
+        }
     }
 
     // ---------- Memória ----------
@@ -99,7 +135,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         while (i < recentes.size - 1) {
             val a = recentes[i]
             val b = recentes[i + 1]
-            if (a.doUsuario && !b.doUsuario && a.texto.isNotBlank() && b.texto.isNotBlank()) {
+            if (a.doUsuario && !b.doUsuario && a.texto.isNotBlank() && b.texto.isNotBlank() &&
+                !b.texto.startsWith("⚠️")
+            ) {
                 saida.add(Message.user(a.texto))
                 saida.add(Message.model(b.texto))
                 i += 2
@@ -237,7 +275,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         mensagens[idx] = atual.copy(texto = atual.texto + parte.toString())
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                if (e is CancellationException) throw e
                 val atual = mensagens[idx]
                 mensagens[idx] = atual.copy(texto = atual.texto + "\n[erro: ${e.message}]")
                 if (usarFerramentas) {
