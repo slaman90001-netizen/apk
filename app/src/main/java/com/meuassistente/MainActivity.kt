@@ -86,6 +86,11 @@ fun TelaChat(vm: ChatViewModel, abrirMemoria: () -> Unit) {
                 onClick = { escolher.launch(arrayOf("*/*")) },
                 enabled = !vm.ocupado
             ) { Text("Escolher arquivo do modelo (.litertlm)") }
+        } else {
+            TextButton(
+                onClick = { escolher.launch(arrayOf("*/*")) },
+                enabled = !vm.ocupado
+            ) { Text("Trocar modelo") }
         }
 
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = lista) {
