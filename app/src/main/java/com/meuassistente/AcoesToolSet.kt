@@ -50,23 +50,24 @@ class AcoesToolSet(private val ctx: Context) : ToolSet {
         return mapOf("sucesso" to ok, "horario" to horario)
     }
 
-    @Tool(description = "Inicia um timer (contagem regressiva) no relógio do celular.")
+    @Tool(description = "Inicia um timer (contagem regressiva) no relógio do celular. Informe minutos e/ou segundos conforme o pedido. Exemplo: 2 segundos = segundos 2 e minutos 0. 5 minutos = minutos 5 e segundos 0.")
     fun criarTimer(
-        @ToolParam(description = "Duração total em minutos, pode ser decimal") minutos: Double,
+        @ToolParam(description = "Quantidade de minutos. Use 0 se o pedido for só em segundos. Padrão: 0") minutos: Int = 0,
+        @ToolParam(description = "Quantidade de segundos. Use 0 se o pedido for só em minutos. Padrão: 0") segundos: Int = 0,
         @ToolParam(description = "Nome do timer. Padrão: Timer") descricao: String = "Timer"
     ): Map<String, Any> {
-        val segundos = (minutos * 60).toInt()
-        if (segundos < 1) {
+        val total = minutos * 60 + segundos
+        if (total < 1) {
             return mapOf("sucesso" to false, "erro" to "duração inválida")
         }
         val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
-            putExtra(AlarmClock.EXTRA_LENGTH, segundos)
+            putExtra(AlarmClock.EXTRA_LENGTH, total)
             putExtra(AlarmClock.EXTRA_MESSAGE, descricao)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
         val ok = abrir(intent)
-        if (ok) avisar("⏳ Timer iniciado: $segundos segundos")
-        return mapOf("sucesso" to ok, "segundos" to segundos)
+        if (ok) avisar("⏳ Timer iniciado: $minutos min $segundos s")
+        return mapOf("sucesso" to ok, "total_segundos" to total)
     }
 
     @Tool(description = "Abre a agenda do celular com um novo evento preenchido, para o usuário confirmar.")
