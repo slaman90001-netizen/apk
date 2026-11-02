@@ -2,6 +2,7 @@ package com.meuassistente
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -9,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -24,14 +26,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                Surface(Modifier.fillMaxSize()) { Chat() }
+                Surface(Modifier.fillMaxSize()) { Raiz() }
             }
         }
     }
 }
 
 @Composable
-fun Chat(vm: ChatViewModel = viewModel()) {
+fun Raiz(vm: ChatViewModel = viewModel()) {
+    var telaMemoria by remember { mutableStateOf(false) }
+    BackHandler(telaMemoria) { telaMemoria = false }
+    if (telaMemoria) {
+        TelaMemoria(vm) { telaMemoria = false }
+    } else {
+        TelaChat(vm) { telaMemoria = true }
+    }
+}
+
+@Composable
+fun TelaChat(vm: ChatViewModel, abrirMemoria: () -> Unit) {
     val escolher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> if (uri != null) vm.importarModelo(uri) }
@@ -50,7 +63,15 @@ fun Chat(vm: ChatViewModel = viewModel()) {
             .imePadding()
             .padding(12.dp)
     ) {
-        Text("Meu Assistente", style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Meu Assistente",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = abrirMemoria) { Text("Memória (${vm.fatos.size})") }
+            TextButton(onClick = { vm.novaConversa() }, enabled = !vm.ocupado) { Text("Nova") }
+        }
 
         if (vm.status.isNotEmpty()) {
             Text(
@@ -84,6 +105,63 @@ fun Chat(vm: ChatViewModel = viewModel()) {
                 onClick = { vm.enviar(texto); texto = "" },
                 enabled = vm.pronto && !vm.ocupado && texto.isNotBlank()
             ) { Text("Enviar") }
+        }
+    }
+}
+
+@Composable
+fun TelaMemoria(vm: ChatViewModel, voltar: () -> Unit) {
+    var novo by remember { mutableStateOf("") }
+
+    Column(
+        Modifier.fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Memória",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = voltar) { Text("Voltar") }
+        }
+        Text(
+            "O que o assistente sabe sobre você. No chat, você também pode dizer: \"lembre que ...\".",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+
+        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+            itemsIndexed(vm.fatos) { i, f ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(f, Modifier.weight(1f))
+                    TextButton(
+                        onClick = { vm.removerFato(i) },
+                        enabled = !vm.ocupado
+                    ) { Text("Apagar") }
+                }
+                HorizontalDivider()
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = novo,
+                onValueChange = { novo = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Novo fato sobre você") }
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = { if (vm.adicionarFato(novo)) novo = "" },
+                enabled = !vm.ocupado && novo.isNotBlank()
+            ) { Text("Adicionar") }
         }
     }
 }
