@@ -113,23 +113,29 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Modelo ----------
 
-    fun importarModelo(uri: Uri) {
+        fun importarModelo(uri: Uri) {
         viewModelScope.launch {
             ocupado = true
+            pronto = false
             status = "Copiando o modelo... pode levar alguns minutos."
             try {
                 withContext(Dispatchers.IO) {
+                    conversa?.close()
+                    engine?.close()
+                    conversa = null
+                    engine = null
                     val tmp = File(arquivoModelo.path + ".tmp")
                     getApplication<Application>().contentResolver.openInputStream(uri)!!.use { entrada ->
                         tmp.outputStream().use { saida -> entrada.copyTo(saida, 1024 * 1024) }
                     }
                     if (arquivoModelo.exists()) arquivoModelo.delete()
                     tmp.renameTo(arquivoModelo)
+                    getApplication<Application>().cacheDir.listFiles()?.forEach { it.deleteRecursively() }
                 }
                 temModelo = true
                 carregarModelo()
             } catch (e: Exception) {
-                status = "Erro ao copiar: ${e.message}"
+                status = "Erro ao copiar: ${e.message}. Feche e reabra o app."
                 ocupado = false
             }
         }
